@@ -1,5 +1,6 @@
 """Configuration loaded from .env."""
 import os
+from urllib.parse import quote as _urlquote
 
 from dotenv import load_dotenv
 
@@ -26,7 +27,13 @@ STRIKES_EACH_SIDE = int(os.getenv("STRIKES_EACH_SIDE", "5"))
 _has_full_creds = all([SMARTAPI_API_KEY, SMARTAPI_CLIENT_CODE, SMARTAPI_PIN, SMARTAPI_TOTP_SECRET])
 AUTH_MODE = os.getenv("AUTH_MODE", "env" if _has_full_creds else "publisher")
 
+# Publisher-login URL. When several apps (redirect URLs) share one API key,
+# LOGIN_REDIRECT_URL picks which registered redirect Angel One sends users
+# back to — set it to this deployment's own URL (e.g. https://x.onrender.com).
+LOGIN_REDIRECT_URL = os.getenv("LOGIN_REDIRECT_URL", "")
 PUBLISHER_LOGIN_URL = f"https://smartapi.angelone.in/publisher-login?api_key={SMARTAPI_API_KEY}"
+if LOGIN_REDIRECT_URL:
+    PUBLISHER_LOGIN_URL += f"&redirect_url={_urlquote(LOGIN_REDIRECT_URL, safe='')}"
 
 # Set the session cookie's Secure flag (any non-empty value). Render sets
 # RENDER=true automatically; enable manually behind any other HTTPS proxy.

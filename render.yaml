@@ -10,5 +10,7 @@ services:
         sync: false          # set in the Render dashboard, never committed
       - key: AUTH_MODE
         value: publisher
+      - key: LOGIN_REDIRECT_URL
+        value: https://expiry-skew-monitor.onrender.com
       - key: PYTHON_VERSION
         value: 3.12.6
