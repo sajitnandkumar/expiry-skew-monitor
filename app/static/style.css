@@ -87,6 +87,25 @@ h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 .connect-btn:hover { filter: brightness(1.1); }
 .login-card .banner { margin-top: 18px; text-align: left; }
 
+.setup-guide {
+  margin-top: 18px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+.setup-guide summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+.setup-guide .guide-body { color: var(--muted); line-height: 1.55; }
+.setup-guide .guide-body b { color: var(--text); }
+.setup-guide ol { padding-left: 20px; margin: 8px 0; }
+.setup-guide li { margin-bottom: 6px; }
+.setup-guide a { color: var(--accent); }
+
 .ws-status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .ws-status .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
 .ws-status.connected .dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }

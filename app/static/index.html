@@ -19,10 +19,30 @@
         <button type="submit" class="connect-btn" id="loginSubmit">Connect Angel One</button>
       </form>
       <p class="login-note">Your credentials are sent to Angel One to sign you
-        in and are never stored — only a session token valid for today.
-        Needs SmartAPI TOTP enabled once:
-        <a href="https://smartapi.angelbroking.com/enable-totp" target="_blank" rel="noopener">enable it here</a>,
-        then use the 6-digit code from your authenticator app.</p>
+        in and are never stored — only a session token valid for today.</p>
+
+      <details class="setup-guide">
+        <summary>First time here? One-time setup (2 minutes)</summary>
+        <div class="guide-body">
+          <p>You need an Angel One trading account and a phone with
+            <b>Google Authenticator</b> (or any authenticator app).</p>
+          <ol>
+            <li>Go to
+              <a href="https://smartapi.angelbroking.com/enable-totp" target="_blank" rel="noopener">smartapi.angelbroking.com/enable-totp</a></li>
+            <li>Log in with your Angel One <b>client code</b> and <b>PIN</b>
+              (an OTP may come to your phone/email)</li>
+            <li>A <b>QR code</b> appears — scan it with Google Authenticator
+              (tap “+” → “Scan a QR code”). Your phone will now always show a
+              6-digit Angel One code that refreshes every 30 seconds.</li>
+          </ol>
+          <p>Then, whenever you want the dashboard: enter your
+            <b>client code</b>, <b>PIN</b>, and the current <b>6-digit code</b>
+            from your authenticator app, and hit <b>Connect Angel One</b>.</p>
+          <p>Sessions last one trading day, so log in fresh each morning.
+            If this page takes ~30 seconds to load first thing, it's just the
+            server waking up.</p>
+        </div>
+      </details>
       <a class="connect-btn" id="connectBtn" href="#" hidden>Connect via Angel One website</a>
       <div class="banner" id="loginBanner" hidden></div>
     </div>
