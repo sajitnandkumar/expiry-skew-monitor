@@ -204,6 +204,40 @@ async def publisher_callback(request: Request):
     return resp
 
 
+class LoginBody(BaseModel):
+    client_code: str
+    pin: str
+    totp: str
+
+
+@app.post("/api/login")
+async def api_login(body: LoginBody):
+    """Multi-user credential login: the documented loginByPassword flow with
+    the visitor's own client code, PIN and one-time TOTP code. Credentials
+    are forwarded to Angel One and never stored; only day-tokens are kept."""
+    if config.AUTH_MODE != "publisher":
+        raise HTTPException(400, "Not in multi-user mode")
+    try:
+        angel = await asyncio.to_thread(
+            AngelClient.from_login,
+            config.SMARTAPI_API_KEY,
+            body.client_code.strip().upper(),
+            body.pin.strip(),
+            body.totp.strip(),
+        )
+    except Exception as exc:
+        log.warning("Credential login failed for %s", body.client_code.strip().upper())
+        raise HTTPException(401, str(exc))
+    session = state.store.create(angel, config.SMARTAPI_API_KEY)
+    resp = JSONResponse({"ok": True, "client_code": session.client_code})
+    resp.set_cookie(
+        COOKIE_NAME, session.sid,
+        httponly=True, samesite="lax", secure=config.COOKIE_SECURE,
+        max_age=12 * 3600,
+    )
+    return resp
+
+
 class TokenBody(BaseModel):
     auth_token: str
     feed_token: str

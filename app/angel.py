@@ -81,11 +81,15 @@ class AngelClient:
     # ------------------------------------------------------------------ auth
     @classmethod
     def from_credentials(cls, api_key: str, client_code: str, pin: str, totp_secret: str) -> "AngelClient":
-        """Standard SmartAPI TOTP login flow -> session + feed token."""
+        """TOTP-secret login (env mode): derive the current code, then log in."""
+        return cls.from_login(api_key, client_code, pin, pyotp.TOTP(totp_secret).now())
+
+    @classmethod
+    def from_login(cls, api_key: str, client_code: str, pin: str, totp_code: str) -> "AngelClient":
+        """Standard SmartAPI loginByPassword flow with a one-time TOTP code."""
         c = cls(api_key)
         c.smart = SmartConnect(api_key=api_key)
-        totp = pyotp.TOTP(totp_secret).now()
-        resp = c.smart.generateSession(client_code, pin, totp)
+        resp = c.smart.generateSession(client_code, pin, totp_code)
         if not resp or not resp.get("status"):
             msg = resp.get("message") if isinstance(resp, dict) else str(resp)
             raise RuntimeError(f"SmartAPI login failed: {msg}")

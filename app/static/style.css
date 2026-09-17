@@ -10,6 +10,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -59,6 +60,19 @@ h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 }
 .login-card p { color: var(--muted); line-height: 1.5; }
 .login-note { font-size: 12px; }
+#loginForm { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+#loginForm input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: 8px;
+  font: inherit;
+}
+#loginForm input:focus { outline: none; border-color: var(--accent); }
+#loginForm .connect-btn { border: none; cursor: pointer; font: inherit; margin-top: 6px; }
+#loginForm .connect-btn:disabled { opacity: 0.6; cursor: wait; }
+
 .connect-btn {
   display: inline-block;
   margin-top: 18px;

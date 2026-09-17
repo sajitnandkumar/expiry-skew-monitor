@@ -143,6 +143,40 @@ function showLogin(loginUrl, error) {
   }
 }
 
+document.getElementById("loginForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = document.getElementById("loginSubmit");
+  btn.disabled = true;
+  btn.textContent = "Connecting…";
+  els.loginBanner.hidden = true;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_code: document.getElementById("fClient").value,
+        pin: document.getElementById("fPin").value,
+        totp: document.getElementById("fTotp").value,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      els.loginBanner.textContent = err.detail || `Login failed (${res.status})`;
+      els.loginBanner.hidden = false;
+      return;
+    }
+    document.getElementById("fPin").value = "";
+    document.getElementById("fTotp").value = "";
+    init();
+  } catch (e) {
+    els.loginBanner.textContent = `Login failed: ${e}`;
+    els.loginBanner.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Connect Angel One";
+  }
+});
+
 els.logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" });
   location.href = "/";

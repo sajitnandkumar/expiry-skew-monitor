@@ -11,9 +11,19 @@
     <div class="login-card">
       <h1>Expiry Skew Monitor</h1>
       <p>Live call vs put time-value skew for Nifty &amp; Sensex weekly expiries.</p>
-      <p class="login-note">Connect your own Angel One account — you log in on
-        Angel One's website; your credentials never touch this server.</p>
-      <a class="connect-btn" id="connectBtn" href="#">Connect Angel One</a>
+      <form id="loginForm">
+        <input id="fClient" placeholder="Angel One client code" autocomplete="username" required>
+        <input id="fPin" type="password" placeholder="PIN" autocomplete="current-password" required>
+        <input id="fTotp" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               placeholder="TOTP code (6 digits)" autocomplete="one-time-code" required>
+        <button type="submit" class="connect-btn" id="loginSubmit">Connect Angel One</button>
+      </form>
+      <p class="login-note">Your credentials are sent to Angel One to sign you
+        in and are never stored — only a session token valid for today.
+        Needs SmartAPI TOTP enabled once:
+        <a href="https://smartapi.angelbroking.com/enable-totp" target="_blank" rel="noopener">enable it here</a>,
+        then use the 6-digit code from your authenticator app.</p>
+      <a class="connect-btn" id="connectBtn" href="#" hidden>Connect via Angel One website</a>
       <div class="banner" id="loginBanner" hidden></div>
     </div>
   </div>
