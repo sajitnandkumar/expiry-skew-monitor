@@ -248,7 +248,16 @@ async def ws_endpoint(ws: WebSocket):
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    # Angel One's My Apps form sometimes rejects redirect URLs with a path,
+    # so the bare domain can be registered instead: accept the publisher
+    # redirect (?auth_token=...&feed_token=...) here too.
+    if (
+        config.AUTH_MODE == "publisher"
+        and request.query_params.get("auth_token")
+        and request.query_params.get("feed_token")
+    ):
+        return await publisher_callback(request)
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
