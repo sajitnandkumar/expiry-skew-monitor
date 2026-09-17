@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expiry Skew Monitor</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Expiry Skew Monitor</h1>
+      <div class="ws-status" id="wsStatus"><span class="dot"></span><span class="label">connecting…</span></div>
+    </div>
+
+    <div class="controls">
+      <div class="index-select">
+        <button id="btnNifty" data-index="NIFTY">NIFTY</button>
+        <button id="btnSensex" data-index="SENSEX">SENSEX</button>
+      </div>
+      <label class="tolerance">
+        Neutral tolerance
+        <input type="number" id="tolerance" min="0" step="0.5" value="5"> %
+      </label>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="k">Index</span><span class="v" id="statIndex">—</span></div>
+      <div class="stat"><span class="k">Spot LTP</span><span class="v" id="statSpot">—</span></div>
+      <div class="stat"><span class="k">ATM Strike</span><span class="v" id="statAtm">—</span></div>
+      <div class="stat"><span class="k">Expiry</span><span class="v" id="statExpiry">—</span></div>
+      <div class="stat"><span class="k">To Close (3:30 IST)</span><span class="v" id="statClock">—</span></div>
+    </div>
+
+    <div class="banner" id="banner" hidden></div>
+  </header>
+
+  <main>
+    <table id="chainTable">
+      <thead>
+        <tr>
+          <th>Strike</th>
+          <th>Call (LTP)</th>
+          <th>Put (LTP)</th>
+          <th>Call TV</th>
+          <th>Put TV</th>
+          <th>TV Higher On</th>
+          <th>&Delta; TV</th>
+          <th>% TV Premium</th>
+        </tr>
+      </thead>
+      <tbody id="chainBody">
+        <tr><td colspan="8" class="empty">Select an index to load the chain</td></tr>
+      </tbody>
+    </table>
+    <p class="legend">
+      <span class="chip put-chip">Put richer</span>
+      <span class="chip call-chip">Call richer</span>
+      <span class="chip neutral-chip">Within tolerance</span>
+      — TV = LTP &minus; intrinsic (vs live spot) · intensity scales with % TV premium · <b>bold row</b> = ATM
+    </p>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
