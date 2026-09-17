@@ -56,7 +56,49 @@ els.tolerance.addEventListener("input", () => {
 });
 
 // --------------------------------------------------------------------- auth
+// Angel One may return tokens in the URL fragment (#auth_token=...), which
+// never reaches the server — catch them here and post them to the backend.
+function extractTokens() {
+  const raw = (location.search.slice(1) + "&" + location.hash.slice(1))
+    .replace(/[?#]/g, "&");
+  const p = new URLSearchParams(raw);
+  const pick = (...names) => names.map((n) => p.get(n)).find((v) => v);
+  const auth = pick("auth_token", "authToken", "jwtToken", "jwttoken", "token");
+  const feed = pick("feed_token", "feedToken", "feedtoken");
+  if (auth && feed) return { auth_token: auth, feed_token: feed, names: null };
+  const names = [...p.keys()].filter((k) => k && k !== "login_error");
+  return names.length ? { auth_token: null, feed_token: null, names } : null;
+}
+
 async function init() {
+  const found = extractTokens();
+  if (found) {
+    history.replaceState(null, "", "/"); // scrub tokens from the URL/history
+    if (found.auth_token) {
+      try {
+        const res = await fetch("/api/callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ auth_token: found.auth_token, feed_token: found.feed_token }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showLogin(null, err.detail || `Login failed (${res.status})`);
+          fillLoginUrl();
+          return;
+        }
+      } catch (e) {
+        showLogin(null, `Login failed: ${e}`);
+        fillLoginUrl();
+        return;
+      }
+    } else if (found.names) {
+      showLogin(null, `Angel One returned no tokens (params received: ${found.names.join(", ")})`);
+      fillLoginUrl();
+      return;
+    }
+  }
+
   let me;
   try {
     me = await (await fetch("/api/me")).json();
@@ -80,11 +122,18 @@ async function init() {
   connectWS();
 }
 
+// Fetch the connect link for a login view shown before /api/me was consulted.
+async function fillLoginUrl() {
+  try {
+    const me = await (await fetch("/api/me")).json();
+    if (me.login_url) els.connectBtn.href = me.login_url;
+  } catch (e) { /* leave the button pointing nowhere */ }
+}
+
 function showLogin(loginUrl, error) {
   els.dashView.hidden = true;
   els.loginView.hidden = false;
   if (loginUrl) els.connectBtn.href = loginUrl;
-  else els.connectBtn.style.display = "none";
 
   const urlErr = new URLSearchParams(location.search).get("login_error");
   const msg = error || urlErr;

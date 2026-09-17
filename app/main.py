@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -196,6 +196,34 @@ async def publisher_callback(request: Request):
 
     session = state.store.create(angel, config.SMARTAPI_API_KEY)
     resp = RedirectResponse("/")
+    resp.set_cookie(
+        COOKIE_NAME, session.sid,
+        httponly=True, samesite="lax", secure=config.COOKIE_SECURE,
+        max_age=12 * 3600,
+    )
+    return resp
+
+
+class TokenBody(BaseModel):
+    auth_token: str
+    feed_token: str
+
+
+@app.post("/api/callback")
+async def api_callback(body: TokenBody):
+    """Tokens caught client-side (e.g. from a URL fragment, which never
+    reaches the server) are posted here to create the session."""
+    if config.AUTH_MODE != "publisher":
+        raise HTTPException(400, "Not in publisher mode")
+    try:
+        angel = await asyncio.to_thread(
+            AngelClient.from_tokens, config.SMARTAPI_API_KEY, body.auth_token, body.feed_token
+        )
+    except Exception as exc:
+        log.error("Posted token validation failed: %s", exc)
+        raise HTTPException(401, str(exc))
+    session = state.store.create(angel, config.SMARTAPI_API_KEY)
+    resp = JSONResponse({"ok": True, "client_code": session.client_code})
     resp.set_cookie(
         COOKIE_NAME, session.sid,
         httponly=True, samesite="lax", secure=config.COOKIE_SECURE,
