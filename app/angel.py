@@ -1,7 +1,15 @@
-"""Angel One SmartAPI client: login, instrument master, option-chain resolution."""
+"""Angel One SmartAPI client: login, instrument master, option-chain resolution.
+
+Supports two ways of establishing a session:
+- from_credentials(): classic TOTP login with the owner's own credentials
+- from_tokens(): publisher-login flow — Angel One redirects the visitor back
+  with auth_token & feed_token query params; the client code is fetched via
+  Get Profile using that token.
+"""
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 
 import pyotp
@@ -24,47 +32,27 @@ def ist_now() -> datetime:
     return datetime.now(IST)
 
 
-class AngelClient:
-    def __init__(self, api_key: str, client_code: str, pin: str, totp_secret: str):
-        self.api_key = api_key
-        self.client_code = client_code
-        self.pin = pin
-        self.totp_secret = totp_secret
-        self.smart: SmartConnect | None = None
-        self.jwt_token: str | None = None
-        self.feed_token: str | None = None
-        self._instruments: list[dict] | None = None
+# --------------------------------------------------------- instrument master
+# Shared across all user sessions; downloaded once per day.
+_master_lock = threading.Lock()
+_master: dict = {"date": None, "rows": None}
 
-    # ------------------------------------------------------------------ auth
-    def login(self) -> None:
-        """Standard SmartAPI TOTP login flow -> session + feed token."""
-        self.smart = SmartConnect(api_key=self.api_key)
-        totp = pyotp.TOTP(self.totp_secret).now()
-        resp = self.smart.generateSession(self.client_code, self.pin, totp)
-        if not resp or not resp.get("status"):
-            msg = resp.get("message") if isinstance(resp, dict) else str(resp)
-            raise RuntimeError(f"SmartAPI login failed: {msg}")
-        data = resp["data"]
-        # SmartWebSocketV2 wants the raw JWT (no "Bearer " prefix).
-        self.jwt_token = data["jwtToken"].replace("Bearer ", "")
-        self.feed_token = data.get("feedToken") or self.smart.getfeedToken()
-        log.info("SmartAPI login OK for %s", self.client_code)
 
-    # ------------------------------------------------- instrument master
-    def load_instruments(self, force: bool = False) -> list[dict]:
-        """Download the Angel One instrument master (cached per day)."""
-        if self._instruments is not None and not force:
-            return self._instruments
+def load_instruments(force: bool = False) -> list[dict]:
+    """Download the Angel One instrument master (cached per IST day)."""
+    today = ist_now().date().isoformat()
+    with _master_lock:
+        if not force and _master["rows"] is not None and _master["date"] == today:
+            return _master["rows"]
 
-        today = ist_now().date().isoformat()
         if not force and os.path.exists(CACHE_FILE):
             try:
                 with open(CACHE_FILE) as f:
                     cached = json.load(f)
                 if cached.get("date") == today:
-                    self._instruments = cached["rows"]
-                    log.info("Instrument master loaded from cache (%d rows)", len(self._instruments))
-                    return self._instruments
+                    _master.update(date=today, rows=cached["rows"])
+                    log.info("Instrument master loaded from cache (%d rows)", len(cached["rows"]))
+                    return cached["rows"]
             except Exception:
                 log.warning("Instrument cache unreadable, re-downloading")
 
@@ -72,7 +60,7 @@ class AngelClient:
         r = requests.get(INSTRUMENT_MASTER_URL, timeout=120)
         r.raise_for_status()
         rows = r.json()
-        self._instruments = rows
+        _master.update(date=today, rows=rows)
         try:
             with open(CACHE_FILE, "w") as f:
                 json.dump({"date": today, "rows": rows}, f)
@@ -80,6 +68,51 @@ class AngelClient:
             log.warning("Could not write instrument cache", exc_info=True)
         log.info("Instrument master downloaded (%d rows)", len(rows))
         return rows
+
+
+class AngelClient:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.smart: SmartConnect | None = None
+        self.jwt_token: str | None = None
+        self.feed_token: str | None = None
+        self.client_code: str | None = None
+
+    # ------------------------------------------------------------------ auth
+    @classmethod
+    def from_credentials(cls, api_key: str, client_code: str, pin: str, totp_secret: str) -> "AngelClient":
+        """Standard SmartAPI TOTP login flow -> session + feed token."""
+        c = cls(api_key)
+        c.smart = SmartConnect(api_key=api_key)
+        totp = pyotp.TOTP(totp_secret).now()
+        resp = c.smart.generateSession(client_code, pin, totp)
+        if not resp or not resp.get("status"):
+            msg = resp.get("message") if isinstance(resp, dict) else str(resp)
+            raise RuntimeError(f"SmartAPI login failed: {msg}")
+        data = resp["data"]
+        # SmartWebSocketV2 wants the raw JWT (no "Bearer " prefix).
+        c.jwt_token = data["jwtToken"].replace("Bearer ", "")
+        c.feed_token = data.get("feedToken") or c.smart.getfeedToken()
+        c.client_code = client_code
+        log.info("SmartAPI login OK for %s", client_code)
+        return c
+
+    @classmethod
+    def from_tokens(cls, api_key: str, auth_token: str, feed_token: str) -> "AngelClient":
+        """Publisher-login flow: validate the redirected tokens via Get Profile."""
+        c = cls(api_key)
+        c.smart = SmartConnect(api_key=api_key)
+        auth_token = auth_token.replace("Bearer ", "")
+        c.smart.setAccessToken(auth_token)
+        c.jwt_token = auth_token
+        c.feed_token = feed_token
+        resp = c.smart.getProfile("")  # header token is what authenticates
+        if not resp or not resp.get("status"):
+            msg = resp.get("message") if isinstance(resp, dict) else str(resp)
+            raise RuntimeError(f"Token validation failed: {msg}")
+        c.client_code = resp["data"]["clientcode"]
+        log.info("Publisher login OK for %s", c.client_code)
+        return c
 
     # ------------------------------------------------------------- quotes
     def spot_ltp(self, index_key: str) -> float:
@@ -99,7 +132,7 @@ class AngelClient:
         where rows = [{strike, ce_token, pe_token, ce_symbol, pe_symbol}].
         """
         cfg = INDEX_CONFIG[index_key]
-        instruments = self.load_instruments()
+        instruments = load_instruments()
         spot = self.spot_ltp(index_key)
 
         interval = cfg["strike_interval"]

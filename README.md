@@ -15,6 +15,16 @@ absolute TV delta, and `% TV Premium = (higher TV / lower TV − 1) × 100` —
 with row colours whose intensity scales with the size of the skew.
 Intrinsic is recomputed against the live ticking spot on every update.
 
+## Two ways to run it
+
+- **Local, single-user (env mode):** put your full credentials in `.env` and
+  the app logs in as you at startup — the original behaviour.
+- **Hosted, multi-user (publisher mode):** deploy it (e.g. Render) with only
+  `SMARTAPI_API_KEY` set. Visitors click **Connect Angel One** and log in on
+  Angel One's own website (SmartAPI publisher-login flow); their credentials
+  never touch the server. Each visitor gets their own session, market feed,
+  and rate limits.
+
 ## Features
 
 - SmartAPI TOTP login flow (session + feed token) from `.env` credentials
@@ -74,6 +84,21 @@ python run.py
 
 Open <http://127.0.0.1:8000>, click **NIFTY** or **SENSEX**, and the chain
 loads and starts ticking.
+
+## Deploying to Render (free tier)
+
+1. Push this repo to GitHub (a `render.yaml` blueprint is included).
+2. On <https://render.com>: **New → Blueprint**, pick the repo. When prompted,
+   set `SMARTAPI_API_KEY` to your API key (it's stored as a secret).
+3. After the first deploy you get `https://<app-name>.onrender.com`.
+4. Back on <https://smartapi.angelbroking.com> → **My Apps** → your app: set
+   the **Redirect URL** to `https://<app-name>.onrender.com/callback`.
+5. Share the link. Visitors hit **Connect Angel One**, log in on Angel One's
+   site, and land back on the dashboard connected to their own account.
+
+Free-tier notes: the instance sleeps after ~15 min idle (first visit after
+that takes ~30–60 s to wake) and Angel One sessions expire at midnight IST,
+so everyone reconnects each trading day.
 
 ## How it works
 

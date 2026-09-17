@@ -1,6 +1,12 @@
 "use strict";
 
 const els = {
+  loginView: document.getElementById("loginView"),
+  dashView: document.getElementById("dashView"),
+  connectBtn: document.getElementById("connectBtn"),
+  loginBanner: document.getElementById("loginBanner"),
+  account: document.getElementById("account"),
+  logoutBtn: document.getElementById("logoutBtn"),
   wsStatus: document.getElementById("wsStatus"),
   banner: document.getElementById("banner"),
   tolerance: document.getElementById("tolerance"),
@@ -26,6 +32,10 @@ els.buttons.forEach((btn) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ index: btn.dataset.index }),
       });
+      if (res.status === 401) {
+        init(); // session expired -> back to the login view
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         showBanner(err.detail || `Selection failed (${res.status})`);
@@ -45,6 +55,50 @@ els.tolerance.addEventListener("input", () => {
   if (lastSnapshot) render(lastSnapshot);
 });
 
+// --------------------------------------------------------------------- auth
+async function init() {
+  let me;
+  try {
+    me = await (await fetch("/api/me")).json();
+  } catch (e) {
+    showLogin(null, `Server unreachable: ${e}`);
+    return;
+  }
+
+  if (!me.authenticated) {
+    showLogin(me.login_url, me.auth_error);
+    return;
+  }
+
+  els.loginView.hidden = true;
+  els.dashView.hidden = false;
+  if (me.mode === "publisher") {
+    els.account.textContent = me.client_code || "";
+    els.account.hidden = false;
+    els.logoutBtn.hidden = false;
+  }
+  connectWS();
+}
+
+function showLogin(loginUrl, error) {
+  els.dashView.hidden = true;
+  els.loginView.hidden = false;
+  if (loginUrl) els.connectBtn.href = loginUrl;
+  else els.connectBtn.style.display = "none";
+
+  const urlErr = new URLSearchParams(location.search).get("login_error");
+  const msg = error || urlErr;
+  if (msg) {
+    els.loginBanner.textContent = msg;
+    els.loginBanner.hidden = false;
+  }
+}
+
+els.logoutBtn.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.href = "/";
+});
+
 // ---------------------------------------------------------------- websocket
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -53,15 +107,25 @@ function connectWS() {
     if (ws.readyState === WebSocket.OPEN) ws.send("ping");
   }, 15000);
 
-  ws.onmessage = (ev) => render(JSON.parse(ev.data));
+  let authRejected = false;
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "auth_required") {
+      authRejected = true;
+      init(); // session expired -> back to the login view
+      return;
+    }
+    render(msg);
+  };
   ws.onclose = () => {
     clearInterval(ping);
+    if (authRejected) return;
     setUiWsStatus("disconnected", "reconnecting…");
     setTimeout(connectWS, 2000);
   };
   ws.onerror = () => ws.close();
 }
-connectWS();
+init();
 
 // ------------------------------------------------------------------- render
 function render(snap) {

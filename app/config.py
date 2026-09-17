@@ -19,6 +19,19 @@ PORT = int(os.getenv("PORT", "8000"))
 # Strikes on each side of ATM (5 -> 11 rows total).
 STRIKES_EACH_SIDE = int(os.getenv("STRIKES_EACH_SIDE", "5"))
 
+# "env": single-user, auto-login with the credentials above (local use).
+# "publisher": multi-user, visitors connect their own Angel One account via
+# the SmartAPI publisher-login redirect flow (hosted use; only the API key
+# is needed). Defaults to env mode when full credentials are present.
+_has_full_creds = all([SMARTAPI_API_KEY, SMARTAPI_CLIENT_CODE, SMARTAPI_PIN, SMARTAPI_TOTP_SECRET])
+AUTH_MODE = os.getenv("AUTH_MODE", "env" if _has_full_creds else "publisher")
+
+PUBLISHER_LOGIN_URL = f"https://smartapi.angelone.in/publisher-login?api_key={SMARTAPI_API_KEY}"
+
+# Set the session cookie's Secure flag (any non-empty value). Render sets
+# RENDER=true automatically; enable manually behind any other HTTPS proxy.
+COOKIE_SECURE = bool(os.getenv("COOKIE_SECURE") or os.getenv("RENDER"))
+
 INDEX_CONFIG = {
     "NIFTY": {
         "name": "NIFTY",

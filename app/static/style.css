@@ -28,6 +28,51 @@ header {
 .title-row { display: flex; align-items: center; justify-content: space-between; }
 h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 
+.header-right { display: flex; align-items: center; gap: 16px; }
+.account { color: var(--muted); font-size: 12px; }
+.logout-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.logout-btn:hover { color: var(--text); }
+
+#loginView {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 44px;
+  max-width: 440px;
+  text-align: center;
+}
+.login-card p { color: var(--muted); line-height: 1.5; }
+.login-note { font-size: 12px; }
+.connect-btn {
+  display: inline-block;
+  margin-top: 18px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.connect-btn:hover { filter: brightness(1.1); }
+.login-card .banner { margin-top: 18px; text-align: left; }
+
 .ws-status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .ws-status .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
 .ws-status.connected .dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }

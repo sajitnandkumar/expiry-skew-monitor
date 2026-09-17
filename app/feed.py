@@ -48,6 +48,17 @@ class FeedManager:
         self._thread = threading.Thread(target=run, name="smartws", daemon=True)
         self._thread.start()
 
+    def stop(self) -> None:
+        """Close the Angel One websocket (used when a user session ends)."""
+        with self._lock:
+            self._current_sub = None
+        if self._sws:
+            try:
+                self._sws.close_connection()
+            except Exception:
+                log.warning("close_connection failed (ignored)", exc_info=True)
+        self.status = "disconnected"
+
     # ---------------------------------------------------------- subscription
     def set_subscription(self, token_list: list[dict]) -> None:
         """Replace the active subscription with `token_list`

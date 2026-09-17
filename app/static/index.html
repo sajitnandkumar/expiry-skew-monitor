@@ -7,10 +7,26 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <div id="loginView" hidden>
+    <div class="login-card">
+      <h1>Expiry Skew Monitor</h1>
+      <p>Live call vs put time-value skew for Nifty &amp; Sensex weekly expiries.</p>
+      <p class="login-note">Connect your own Angel One account — you log in on
+        Angel One's website; your credentials never touch this server.</p>
+      <a class="connect-btn" id="connectBtn" href="#">Connect Angel One</a>
+      <div class="banner" id="loginBanner" hidden></div>
+    </div>
+  </div>
+
+  <div id="dashView" hidden>
   <header>
     <div class="title-row">
       <h1>Expiry Skew Monitor</h1>
-      <div class="ws-status" id="wsStatus"><span class="dot"></span><span class="label">connecting…</span></div>
+      <div class="header-right">
+        <span class="account" id="account" hidden></span>
+        <button class="logout-btn" id="logoutBtn" hidden>Disconnect</button>
+        <div class="ws-status" id="wsStatus"><span class="dot"></span><span class="label">connecting…</span></div>
+      </div>
     </div>
 
     <div class="controls">
@@ -60,6 +76,7 @@
       — TV = LTP &minus; intrinsic (vs live spot) · intensity scales with % TV premium · <b>bold row</b> = ATM
     </p>
   </main>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
