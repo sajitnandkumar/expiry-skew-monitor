@@ -23,31 +23,39 @@ let lastSnapshot = null;
 let toleranceInitialised = false;
 
 // ---------------------------------------------------------------- selection
-els.buttons.forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    els.buttons.forEach((b) => (b.disabled = true));
-    try {
-      const res = await fetch("/api/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: btn.dataset.index }),
-      });
-      if (res.status === 401) {
-        init(); // session expired -> back to the login view
-        return;
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        showBanner(err.detail || `Selection failed (${res.status})`);
-        return;
-      }
-      hideBanner();
-      render(await res.json());
-    } catch (e) {
-      showBanner(`Selection failed: ${e}`);
-    } finally {
-      els.buttons.forEach((b) => (b.disabled = false));
+let defaultIndex = null;   // index expiring soonest, from /api/me
+let autoSelectDone = false;
+
+async function selectIndex(index) {
+  els.buttons.forEach((b) => (b.disabled = true));
+  try {
+    const res = await fetch("/api/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index }),
+    });
+    if (res.status === 401) {
+      init(); // session expired -> back to the login view
+      return;
     }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showBanner(err.detail || `Selection failed (${res.status})`);
+      return;
+    }
+    hideBanner();
+    render(await res.json());
+  } catch (e) {
+    showBanner(`Selection failed: ${e}`);
+  } finally {
+    els.buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+els.buttons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    autoSelectDone = true; // manual choice wins
+    selectIndex(btn.dataset.index);
   });
 });
 
@@ -119,6 +127,7 @@ async function init() {
     els.account.hidden = false;
     els.logoutBtn.hidden = false;
   }
+  defaultIndex = me.default_index || null;
   connectWS();
 }
 
@@ -214,6 +223,16 @@ init();
 function render(snap) {
   lastSnapshot = snap;
   const h = snap.header;
+
+  // First load: auto-select the index expiring soonest (today on expiry days).
+  if (!autoSelectDone) {
+    if (h.index) {
+      autoSelectDone = true; // server session already has a chain
+    } else if (defaultIndex) {
+      autoSelectDone = true;
+      selectIndex(defaultIndex);
+    }
+  }
 
   if (!toleranceInitialised && h.tolerance_pct != null) {
     els.tolerance.value = h.tolerance_pct;

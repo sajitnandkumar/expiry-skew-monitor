@@ -86,25 +86,32 @@
       <thead>
         <tr>
           <th>Strike</th>
-          <th>Call (LTP)</th>
-          <th>Put (LTP)</th>
-          <th>Call TV</th>
-          <th>Put TV</th>
-          <th>TV Higher On</th>
-          <th>&Delta; TV</th>
-          <th>% TV Premium</th>
+          <th>Call Price</th>
+          <th>Put Price</th>
+          <th>Call Time Value</th>
+          <th>Put Time Value</th>
+          <th>Pricier Side</th>
+          <th>Gap (&#8377;)</th>
+          <th>Gap (%)</th>
         </tr>
       </thead>
       <tbody id="chainBody">
-        <tr><td colspan="8" class="empty">Select an index to load the chain</td></tr>
+        <tr><td colspan="8" class="empty">Loading option chain&hellip;</td></tr>
       </tbody>
     </table>
-    <p class="legend">
-      <span class="chip put-chip">Put richer</span>
-      <span class="chip call-chip">Call richer</span>
-      <span class="chip neutral-chip">Within tolerance</span>
-      — TV = LTP &minus; intrinsic (vs live spot) · intensity scales with % TV premium · <b>bold row</b> = ATM
-    </p>
+    <div class="legend">
+      <p><b>Time value</b> is what's left of an option's price after removing
+        its built-in worth at the current index level — the pure premium for
+        time &amp; risk. At the same strike, calls and puts should carry a
+        similar time value; the colours flag when one side costs more:</p>
+      <p>
+        <span class="chip call-chip">Green</span> the call costs more &nbsp;·&nbsp;
+        <span class="chip put-chip">Red</span> the put costs more &nbsp;·&nbsp;
+        <span class="chip neutral-chip">Grey</span> about equal
+      </p>
+      <p>Darker shade = bigger gap. The <b>bold row</b> is the strike closest
+        to the current index level (at-the-money).</p>
+    </div>
   </main>
   </div>
 

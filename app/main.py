@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .angel import AngelClient, ist_now, load_instruments
+from .angel import AngelClient, default_index, ist_now, load_instruments
 from .sessions import COOKIE_NAME, SessionStore, UserSession
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -157,6 +157,7 @@ async def me(request: Request):
         "client_code": session.client_code if session else None,
         "login_url": config.PUBLISHER_LOGIN_URL if config.AUTH_MODE == "publisher" else None,
         "auth_error": state.startup_error,
+        "default_index": await asyncio.to_thread(default_index) if session else None,
     }
 
 

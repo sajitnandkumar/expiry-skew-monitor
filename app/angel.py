@@ -70,6 +70,39 @@ def load_instruments(force: bool = False) -> list[dict]:
         return rows
 
 
+def _nearest_expiry_date(index_key: str, instruments: list[dict]):
+    cfg = INDEX_CONFIG[index_key]
+    today = ist_now().date()
+    best = None
+    for row in instruments:
+        if (
+            row.get("name") == cfg["name"]
+            and row.get("instrumenttype") == "OPTIDX"
+            and row.get("exch_seg") == cfg["opt_seg"]
+        ):
+            try:
+                d = datetime.strptime(row.get("expiry", ""), "%d%b%Y").date()
+            except ValueError:
+                continue
+            if d >= today and (best is None or d < best):
+                best = d
+    return best
+
+
+def default_index() -> str | None:
+    """The index to preselect: the one expiring soonest (today on expiry
+    days); NIFTY wins ties."""
+    try:
+        instruments = load_instruments()
+    except Exception:
+        return None
+    dates = {k: _nearest_expiry_date(k, instruments) for k in INDEX_CONFIG}
+    dates = {k: d for k, d in dates.items() if d}
+    if not dates:
+        return None
+    return min(dates, key=lambda k: (dates[k], k != "NIFTY"))
+
+
 class AngelClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
