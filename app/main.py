@@ -160,13 +160,32 @@ async def me(request: Request):
     }
 
 
+# The docs say auth_token & feed_token, but Angel One has shipped other
+# spellings; accept the known variants.
+AUTH_TOKEN_PARAMS = ("auth_token", "authToken", "jwtToken", "jwttoken", "token")
+FEED_TOKEN_PARAMS = ("feed_token", "feedToken", "feedtoken")
+
+
+def _pick(params, names):
+    for n in names:
+        v = params.get(n)
+        if v:
+            return v
+    return None
+
+
 @app.get("/callback")
 async def publisher_callback(request: Request):
     """Angel One redirects here after publisher login with auth_token & feed_token."""
-    auth_token = request.query_params.get("auth_token")
-    feed_token = request.query_params.get("feed_token")
+    auth_token = _pick(request.query_params, AUTH_TOKEN_PARAMS)
+    feed_token = _pick(request.query_params, FEED_TOKEN_PARAMS)
     if not auth_token or not feed_token:
-        return RedirectResponse("/?login_error=" + quote("Angel One did not return tokens"))
+        # Surface which params DID arrive (names only, never values).
+        names = ", ".join(sorted(request.query_params.keys())) or "none"
+        log.error("Publisher redirect without usable tokens; params: %s", names)
+        return RedirectResponse(
+            "/?login_error=" + quote(f"Angel One returned no tokens (params received: {names})")
+        )
     try:
         angel = await asyncio.to_thread(
             AngelClient.from_tokens, config.SMARTAPI_API_KEY, auth_token, feed_token
@@ -252,11 +271,8 @@ async def root(request: Request):
     # Angel One's My Apps form sometimes rejects redirect URLs with a path,
     # so the bare domain can be registered instead: accept the publisher
     # redirect (?auth_token=...&feed_token=...) here too.
-    if (
-        config.AUTH_MODE == "publisher"
-        and request.query_params.get("auth_token")
-        and request.query_params.get("feed_token")
-    ):
+    params = request.query_params
+    if config.AUTH_MODE == "publisher" and params and "login_error" not in params:
         return await publisher_callback(request)
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
