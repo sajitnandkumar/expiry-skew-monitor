@@ -30,6 +30,17 @@ let toleranceInitialised = false;
 let defaultIndex = null;   // index expiring soonest, from /api/me
 let autoSelectDone = false;
 let selecting = false;     // suppress row re-renders while a selection loads
+let stockFilter = "all";   // all | call | put (stocks view quick filter)
+
+const skewFilterEl = document.getElementById("skewFilter");
+skewFilterEl.querySelectorAll("button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    stockFilter = btn.dataset.filter;
+    skewFilterEl.querySelectorAll("button").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    if (lastSnapshot) render(lastSnapshot);
+  });
+});
 
 async function selectIndex(index) {
   els.buttons.forEach((b) => (b.disabled = true));
@@ -282,6 +293,7 @@ const STOCK_HEAD = `
 let currentHead = null;
 
 function setTableHead(kind) {
+  skewFilterEl.hidden = kind !== "stocks";
   if (kind === currentHead) return;
   currentHead = kind;
   document.getElementById("chainHead").innerHTML = kind === "stocks" ? STOCK_HEAD : INDEX_HEAD;
@@ -347,22 +359,40 @@ function renderIndexRows(rows, h, tolerance) {
 }
 
 function renderStockRows(rows, tolerance) {
-  // One ATM row per stock, biggest skew first; rows without prices sink.
-  const computed = rows.map((row) => ({
+  // One ATM row per stock, alphabetical; ATM legs with zero volume today
+  // get a not-traded note instead of a (meaningless) gap.
+  let computed = rows.map((row) => ({
     row,
     s: skewFor(row.spot, row.strike, row.call, row.put, tolerance),
+    untraded: !row.ce_traded && !row.pe_traded ? "CE & PE not traded"
+      : !row.ce_traded ? "CE not traded"
+      : !row.pe_traded ? "PE not traded" : null,
   }));
-  computed.sort((a, b) => (b.s.pct ?? -1) - (a.s.pct ?? -1) || (b.s.delta ?? -1) - (a.s.delta ?? -1));
+  if (stockFilter !== "all") {
+    const want = stockFilter === "call" ? "Call" : "Put";
+    computed = computed.filter((c) => !c.untraded && c.s.side === want);
+  }
+  computed.sort((a, b) => a.row.name.localeCompare(b.row.name));
 
   els.body.innerHTML = "";
-  for (const { row, s } of computed) {
+  if (!computed.length) {
+    els.body.innerHTML = `<tr><td colspan="11" class="empty">No stocks match this filter right now</td></tr>`;
+    return;
+  }
+  for (const { row, s, untraded } of computed) {
     const tr = document.createElement("tr");
-    tr.style.background = s.bg;
+    tr.style.background = untraded ? "" : s.bg;
+    const tail = untraded
+      ? `<td>${row.call != null ? fmt(row.call) : "—"}</td>
+         <td>${row.put != null ? fmt(row.put) : "—"}</td>
+         <td>—</td><td>—</td>
+         <td colspan="3" class="side-neutral">${untraded}</td>`
+      : skewCells(row, s);
     tr.innerHTML =
       `<td class="stock-name">${row.name}</td>` +
       `<td>${row.spot != null ? fmt(row.spot) : "—"}</td>` +
       `<td>${row.bse != null ? fmt(row.bse) : "—"}</td>` +
-      `<td>${fmtStrike(row.strike)}</td>` + skewCells(row, s);
+      `<td>${fmtStrike(row.strike)}</td>` + tail;
     els.body.appendChild(tr);
   }
 }

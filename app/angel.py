@@ -245,26 +245,33 @@ class AngelClient:
         }
 
     # ------------------------------------------------- stock F&O (one ATM row per stock)
-    def _bulk_ltps(self, exchange: str, tokens: list[str]) -> dict[str, float]:
-        """LTPs for many instruments via the bulk market-quote API
-        (50 tokens per request, rate-limited to ~1 request/second)."""
-        out: dict[str, float] = {}
+    def _bulk_quotes(self, exchange: str, tokens: list[str], mode: str = "LTP") -> dict[str, dict]:
+        """Quotes for many instruments via the bulk market-quote API
+        (50 tokens per request, rate-limited to ~1 request/second).
+        Returns token -> {ltp, volume}; volume only in FULL mode."""
+        out: dict[str, dict] = {}
         for i in range(0, len(tokens), 50):
             chunk = tokens[i:i + 50]
             try:
-                resp = self.smart.getMarketData("LTP", {exchange: chunk})
+                resp = self.smart.getMarketData(mode, {exchange: chunk})
             except Exception as exc:
                 log.warning("getMarketData chunk failed: %s", exc)
                 resp = None
             if resp and resp.get("status"):
                 for q in resp["data"].get("fetched", []):
                     try:
-                        out[str(q["symbolToken"])] = float(q["ltp"])
+                        out[str(q["symbolToken"])] = {
+                            "ltp": float(q["ltp"]),
+                            "volume": int(q.get("tradeVolume") or q.get("volume") or 0),
+                        }
                     except (KeyError, TypeError, ValueError):
                         continue
             if i + 50 < len(tokens):
                 time.sleep(1.05)
         return out
+
+    def _bulk_ltps(self, exchange: str, tokens: list[str]) -> dict[str, float]:
+        return {t: q["ltp"] for t, q in self._bulk_quotes(exchange, tokens).items()}
 
     def build_stock_chain(self) -> dict:
         """All NSE F&O stocks for the nearest (monthly) stock-option expiry:
@@ -358,14 +365,19 @@ class AngelClient:
         if not rows:
             raise RuntimeError("No stock rows could be built (spot quotes unavailable?)")
 
-        # Prefill option LTPs: illiquid stock options can go minutes between
-        # ticks, so the table starts populated instead of waiting on the feed.
-        opt_ltps = self._bulk_ltps(
-            "NFO", [t for r in rows for t in (r["ce_token"], r["pe_token"])]
+        # Prefill option quotes (FULL mode: LTP + day volume): illiquid stock
+        # options can go minutes between ticks, so the table starts populated,
+        # and volume tells us whether each ATM leg has traded at all today.
+        opt_quotes = self._bulk_quotes(
+            "NFO", [t for r in rows for t in (r["ce_token"], r["pe_token"])], mode="FULL"
         )
         for r in rows:
-            r["call0"] = opt_ltps.get(str(r["ce_token"]))
-            r["put0"] = opt_ltps.get(str(r["pe_token"]))
+            ce = opt_quotes.get(str(r["ce_token"])) or {}
+            pe = opt_quotes.get(str(r["pe_token"])) or {}
+            r["call0"] = ce.get("ltp")
+            r["put0"] = pe.get("ltp")
+            r["ce_vol"] = ce.get("volume", 0)
+            r["pe_vol"] = pe.get("volume", 0)
         log.info("Stock chain built: %d stocks, expiry %s", len(rows), expiry_str)
 
         return {

@@ -132,6 +132,8 @@ def build_snapshot(session: UserSession | None) -> dict:
                 "bse": (prices.get(f"3:{r['bse_token']}") or r.get("bse0")) if r.get("bse_token") else None,
                 "call": prices.get(f"2:{r['ce_token']}") or r.get("call0"),
                 "put": prices.get(f"2:{r['pe_token']}") or r.get("put0"),
+                "ce_traded": r.get("ce_vol", 0) > 0,
+                "pe_traded": r.get("pe_vol", 0) > 0,
             })
     return {"type": "snapshot", "header": header, "rows": rows}
 
