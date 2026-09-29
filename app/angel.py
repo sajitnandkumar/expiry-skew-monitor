@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import pyotp
@@ -230,6 +231,7 @@ class AngelClient:
             log.warning("Strikes missing CE/PE in master for %s %s: %s", index_key, expiry_str, missing)
 
         return {
+            "kind": "index",
             "index": index_key,
             "spot": spot,
             "expiry": expiry_str,
@@ -240,4 +242,120 @@ class AngelClient:
             "spot_token": cfg["spot_token"],
             "spot_ws_exchange_type": cfg["spot_ws_exchange_type"],
             "opt_ws_exchange_type": cfg["opt_ws_exchange_type"],
+        }
+
+    # ------------------------------------------------- stock F&O (one ATM row per stock)
+    def _bulk_ltps(self, exchange: str, tokens: list[str]) -> dict[str, float]:
+        """LTPs for many instruments via the bulk market-quote API
+        (50 tokens per request, rate-limited to ~1 request/second)."""
+        out: dict[str, float] = {}
+        for i in range(0, len(tokens), 50):
+            chunk = tokens[i:i + 50]
+            try:
+                resp = self.smart.getMarketData("LTP", {exchange: chunk})
+            except Exception as exc:
+                log.warning("getMarketData chunk failed: %s", exc)
+                resp = None
+            if resp and resp.get("status"):
+                for q in resp["data"].get("fetched", []):
+                    try:
+                        out[str(q["symbolToken"])] = float(q["ltp"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+            if i + 50 < len(tokens):
+                time.sleep(1.05)
+        return out
+
+    def build_stock_chain(self) -> dict:
+        """All NSE F&O stocks for the nearest (monthly) stock-option expiry:
+        one row per stock at the strike closest to its live spot."""
+        instruments = load_instruments()
+        today = ist_now().date()
+
+        opts = [
+            r for r in instruments
+            if r.get("instrumenttype") == "OPTSTK" and r.get("exch_seg") == "NFO"
+        ]
+        if not opts:
+            raise RuntimeError("No OPTSTK instruments found in master")
+
+        expiries: dict[str, object] = {}
+        for r in opts:
+            e = r.get("expiry", "")
+            if e not in expiries:
+                try:
+                    expiries[e] = datetime.strptime(e, "%d%b%Y").date()
+                except ValueError:
+                    expiries[e] = None
+        future = {e: d for e, d in expiries.items() if d and d >= today}
+        if not future:
+            raise RuntimeError("No future stock-option expiry found")
+        expiry_str = min(future, key=future.get)
+
+        # name -> strike -> {CE: token, PE: token}
+        by_name: dict[str, dict[float, dict]] = {}
+        for r in opts:
+            if r.get("expiry") != expiry_str:
+                continue
+            try:
+                strike = float(r["strike"]) / 100.0
+            except (KeyError, ValueError):
+                continue
+            sym = r.get("symbol", "")
+            side = "CE" if sym.endswith("CE") else "PE" if sym.endswith("PE") else None
+            if side:
+                by_name.setdefault(r["name"], {}).setdefault(strike, {})[side] = r["token"]
+
+        # equity spot token per stock (NSE cash symbol NAME-EQ)
+        eq_token: dict[str, str] = {}
+        for r in instruments:
+            sym = r.get("symbol")
+            if (
+                r.get("exch_seg") == "NSE"
+                and isinstance(sym, str) and sym.endswith("-EQ")
+                and r.get("name") in by_name
+            ):
+                eq_token[r["name"]] = str(r["token"])
+
+        spots = self._bulk_ltps("NSE", sorted(set(eq_token.values())))
+
+        rows = []
+        for name in sorted(by_name):
+            token = eq_token.get(name)
+            spot = spots.get(token) if token else None
+            if not spot:
+                continue
+            candidates = [k for k, v in by_name[name].items() if "CE" in v and "PE" in v]
+            if not candidates:
+                continue
+            strike = min(candidates, key=lambda k: abs(k - spot))
+            rows.append({
+                "name": name,
+                "spot": spot,
+                "spot_token": token,
+                "strike": strike,
+                "ce_token": by_name[name][strike]["CE"],
+                "pe_token": by_name[name][strike]["PE"],
+            })
+        if not rows:
+            raise RuntimeError("No stock rows could be built (spot quotes unavailable?)")
+
+        # Prefill option LTPs: illiquid stock options can go minutes between
+        # ticks, so the table starts populated instead of waiting on the feed.
+        opt_ltps = self._bulk_ltps(
+            "NFO", [t for r in rows for t in (r["ce_token"], r["pe_token"])]
+        )
+        for r in rows:
+            r["call0"] = opt_ltps.get(str(r["ce_token"]))
+            r["put0"] = opt_ltps.get(str(r["pe_token"]))
+        log.info("Stock chain built: %d stocks, expiry %s", len(rows), expiry_str)
+
+        return {
+            "kind": "stocks",
+            "index": "STOCKS",
+            "expiry": expiry_str,
+            "expiry_date": future[expiry_str].isoformat(),
+            "rows": rows,
+            "opt_ws_exchange_type": 2,   # NSE_FO
+            "spot_ws_exchange_type": 1,  # NSE_CM
         }

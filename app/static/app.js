@@ -16,7 +16,11 @@ const els = {
   statAtm: document.getElementById("statAtm"),
   statExpiry: document.getElementById("statExpiry"),
   statClock: document.getElementById("statClock"),
-  buttons: [document.getElementById("btnNifty"), document.getElementById("btnSensex")],
+  buttons: [
+    document.getElementById("btnNifty"),
+    document.getElementById("btnSensex"),
+    document.getElementById("btnStocks"),
+  ],
 };
 
 let lastSnapshot = null;
@@ -25,9 +29,14 @@ let toleranceInitialised = false;
 // ---------------------------------------------------------------- selection
 let defaultIndex = null;   // index expiring soonest, from /api/me
 let autoSelectDone = false;
+let selecting = false;     // suppress row re-renders while a selection loads
 
 async function selectIndex(index) {
   els.buttons.forEach((b) => (b.disabled = true));
+  selecting = true;
+  els.body.innerHTML = `<tr><td colspan="9" class="empty">${
+    index === "STOCKS" ? "Building the F&amp;O stock list (15&ndash;20 s)&hellip;" : "Loading option chain&hellip;"
+  }</td></tr>`;
   try {
     const res = await fetch("/api/select", {
       method: "POST",
@@ -44,10 +53,12 @@ async function selectIndex(index) {
       return;
     }
     hideBanner();
+    selecting = false;
     render(await res.json());
   } catch (e) {
     showBanner(`Selection failed: ${e}`);
   } finally {
+    selecting = false;
     els.buttons.forEach((b) => (b.disabled = false));
   }
 }
@@ -244,62 +255,115 @@ function render(snap) {
   setUiWsStatus(h.ws_status, h.ws_status + (h.ws_error ? ` (${h.ws_error})` : ""));
   if (h.auth_error) showBanner(h.auth_error);
 
-  els.statIndex.textContent = h.index || "—";
+  els.statIndex.textContent =
+    h.kind === "stocks" && h.count ? `STOCKS (${h.count})` : (h.index || "—");
   els.statSpot.textContent = h.spot != null ? fmt(h.spot) : "—";
   els.statAtm.textContent = h.atm_strike != null ? h.atm_strike : "—";
   els.statExpiry.textContent = h.expiry || "—";
 
   els.buttons.forEach((b) => b.classList.toggle("active", b.dataset.index === h.index));
 
-  if (!snap.rows || !snap.rows.length) return;
+  if (selecting || !snap.rows || !snap.rows.length) return;
 
-  const spot = h.spot;
+  setTableHead(h.kind);
+  if (h.kind === "stocks") renderStockRows(snap.rows, tolerance);
+  else renderIndexRows(snap.rows, h, tolerance);
+}
+
+const INDEX_HEAD = `
+  <th>Strike</th><th>Call Price</th><th>Put Price</th>
+  <th>Call Time Value</th><th>Put Time Value</th>
+  <th>Pricier Side</th><th>Gap (₹)</th><th>Gap (%)</th>`;
+const STOCK_HEAD = `
+  <th>Stock</th><th>Strike</th><th>Call Price</th><th>Put Price</th>
+  <th>Call Time Value</th><th>Put Time Value</th>
+  <th>Pricier Side</th><th>Gap (₹)</th><th>Gap (%)</th>`;
+let currentHead = null;
+
+function setTableHead(kind) {
+  if (kind === currentHead) return;
+  currentHead = kind;
+  document.getElementById("chainHead").innerHTML = kind === "stocks" ? STOCK_HEAD : INDEX_HEAD;
+  document.getElementById("chainTable").classList.toggle("stocks", kind === "stocks");
+}
+
+// Time & risk (extrinsic) value skew for one strike vs the (live) spot.
+function skewFor(spot, strike, call, put, tolerance) {
+  if (spot == null || call == null || put == null) {
+    return { callTV: null, putTV: null, delta: null, pct: null, side: "—", sideClass: "side-neutral", bg: "" };
+  }
+  const callTV = call - Math.max(spot - strike, 0);
+  const putTV = put - Math.max(strike - spot, 0);
+  const delta = Math.abs(callTV - putTV);
+  const higher = Math.max(callTV, putTV);
+  const lower = Math.min(callTV, putTV);
+  // % is only meaningful when the cheaper leg still has real time value at
+  // this price level — a near-zero denominator makes tiny gaps explode.
+  const negligible = Math.max(strike * 0.001, 0.05);
+  const pct = lower > negligible ? (higher / lower - 1) * 100 : null;
+
+  let side = "≈ Even", sideClass = "side-neutral", bg = "";
+  // One leg at/below parity: flag the row only if the other leg carries
+  // meaningful TV; two near-zero TVs (deep ITM near expiry) are noise.
+  const neutral = pct != null ? pct <= tolerance : higher <= negligible;
+  if (!neutral) {
+    // Colour by % when it exists, else by the rupee gap vs the price level.
+    const intensity = pct != null ? pct : Math.min(150, (delta / strike) * 2000);
+    if (callTV > putTV) {
+      side = "Call";
+      sideClass = "side-call";
+      bg = `rgba(var(--call), ${alphaFor(intensity)})`;
+    } else {
+      side = "Put";
+      sideClass = "side-put";
+      bg = `rgba(var(--put), ${alphaFor(intensity)})`;
+    }
+  }
+  return { callTV, putTV, delta, pct, side, sideClass, bg };
+}
+
+function skewCells(row, s) {
+  return `
+      <td>${row.call != null ? fmt(row.call) : "—"}</td>
+      <td>${row.put != null ? fmt(row.put) : "—"}</td>
+      <td>${s.callTV != null ? fmt(s.callTV) : "—"}</td>
+      <td>${s.putTV != null ? fmt(s.putTV) : "—"}</td>
+      <td class="${s.sideClass}">${s.side}</td>
+      <td>${s.delta != null ? fmt(s.delta) : "—"}</td>
+      <td>${s.pct != null ? s.pct.toFixed(1) + "%" : "—"}</td>`;
+}
+
+function renderIndexRows(rows, h, tolerance) {
   els.body.innerHTML = "";
-  for (const row of snap.rows) {
+  for (const row of rows) {
     const tr = document.createElement("tr");
     if (h.atm_strike != null && row.strike === h.atm_strike) tr.classList.add("atm");
-
-    const call = row.call, put = row.put;
-    let callTV = null, putTV = null;
-    let side = "—", sideClass = "side-neutral", delta = null, pct = null, bg = "";
-
-    if (spot != null && call != null && put != null) {
-      // Time & risk (extrinsic) value = LTP minus intrinsic vs live spot.
-      callTV = call - Math.max(spot - row.strike, 0);
-      putTV = put - Math.max(row.strike - spot, 0);
-      delta = Math.abs(callTV - putTV);
-
-      const higher = Math.max(callTV, putTV);
-      const lower = Math.min(callTV, putTV);
-      // % only meaningful when the cheaper leg has positive extrinsic value.
-      pct = lower > 0 ? (higher / lower - 1) * 100 : null;
-
-      const neutral = pct != null ? pct <= tolerance : delta === 0;
-      if (neutral) {
-        side = "≈ Even";
-      } else if (callTV > putTV) {
-        side = "Call";
-        sideClass = "side-call";
-        bg = `rgba(var(--call), ${alphaFor(pct != null ? pct : 150)})`;
-      } else {
-        side = "Put";
-        sideClass = "side-put";
-        bg = `rgba(var(--put), ${alphaFor(pct != null ? pct : 150)})`;
-      }
-    }
-
-    tr.style.background = bg;
-    tr.innerHTML = `
-      <td>${row.strike}</td>
-      <td>${call != null ? fmt(call) : "—"}</td>
-      <td>${put != null ? fmt(put) : "—"}</td>
-      <td>${callTV != null ? fmt(callTV) : "—"}</td>
-      <td>${putTV != null ? fmt(putTV) : "—"}</td>
-      <td class="${sideClass}">${side}</td>
-      <td>${delta != null ? fmt(delta) : "—"}</td>
-      <td>${pct != null ? pct.toFixed(1) + "%" : "—"}</td>`;
+    const s = skewFor(h.spot, row.strike, row.call, row.put, tolerance);
+    tr.style.background = s.bg;
+    tr.innerHTML = `<td>${row.strike}</td>` + skewCells(row, s);
     els.body.appendChild(tr);
   }
+}
+
+function renderStockRows(rows, tolerance) {
+  // One ATM row per stock, biggest skew first; rows without prices sink.
+  const computed = rows.map((row) => ({
+    row,
+    s: skewFor(row.spot, row.strike, row.call, row.put, tolerance),
+  }));
+  computed.sort((a, b) => (b.s.pct ?? -1) - (a.s.pct ?? -1) || (b.s.delta ?? -1) - (a.s.delta ?? -1));
+
+  els.body.innerHTML = "";
+  for (const { row, s } of computed) {
+    const tr = document.createElement("tr");
+    tr.style.background = s.bg;
+    tr.innerHTML = `<td class="stock-name">${row.name}</td><td>${fmtStrike(row.strike)}</td>` + skewCells(row, s);
+    els.body.appendChild(tr);
+  }
+}
+
+function fmtStrike(k) {
+  return Number.isInteger(k) ? k : k.toFixed(2);
 }
 
 // Colour intensity: 0% premium -> faint, >=150% -> max.

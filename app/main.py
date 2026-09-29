@@ -94,13 +94,15 @@ def resolve_session(sid: str | None) -> UserSession | None:
 def build_snapshot(session: UserSession | None) -> dict:
     """Assemble the state pushed to one user's browser(s)."""
     chain = session.chain if session else None
+    kind = chain.get("kind", "index") if chain else None
     prices = session.feed.prices if session else {}
     header = {
+        "kind": kind,
         "index": chain["index"] if chain else None,
         "expiry": chain["expiry"] if chain else None,
         "spot": None,
         "atm_strike": None,
-        "strike_interval": chain["strike_interval"] if chain else None,
+        "count": len(chain["rows"]) if chain else None,
         "ws_status": session.feed.status if session else "disconnected",
         "ws_error": session.feed.last_error if session else None,
         "auth_error": state.startup_error,
@@ -109,7 +111,7 @@ def build_snapshot(session: UserSession | None) -> dict:
         "server_time_ist": ist_now().isoformat(),
     }
     rows = []
-    if chain:
+    if chain and kind == "index":
         spot = prices.get(chain["spot_token"]) or chain["spot"]
         header["spot"] = spot
         interval = chain["strike_interval"]
@@ -119,6 +121,15 @@ def build_snapshot(session: UserSession | None) -> dict:
                 "strike": r["strike"],
                 "call": prices.get(r["ce_token"]) if r["ce_token"] else None,
                 "put": prices.get(r["pe_token"]) if r["pe_token"] else None,
+            })
+    elif chain and kind == "stocks":
+        for r in chain["rows"]:
+            rows.append({
+                "name": r["name"],
+                "strike": r["strike"],
+                "spot": prices.get(r["spot_token"]) or r["spot"],
+                "call": prices.get(r["ce_token"]) or r.get("call0"),
+                "put": prices.get(r["pe_token"]) or r.get("put0"),
             })
     return {"type": "snapshot", "header": header, "rows": rows}
 
@@ -281,23 +292,30 @@ async def logout(request: Request):
 @app.post("/api/select")
 async def select_index(body: SelectBody, request: Request):
     index = body.index.upper()
-    if index not in config.INDEX_CONFIG:
-        raise HTTPException(400, f"Unknown index {index!r}; use NIFTY or SENSEX")
+    if index != "STOCKS" and index not in config.INDEX_CONFIG:
+        raise HTTPException(400, f"Unknown index {index!r}; use NIFTY, SENSEX or STOCKS")
     session = resolve_session(request.cookies.get(COOKIE_NAME))
     if session is None:
         raise HTTPException(401, state.startup_error or "Not connected to Angel One")
 
     async with state.select_lock:
         try:
-            chain = await asyncio.to_thread(session.angel.build_chain, index)
+            if index == "STOCKS":
+                chain = await asyncio.to_thread(session.angel.build_stock_chain)
+            else:
+                chain = await asyncio.to_thread(session.angel.build_chain, index)
         except Exception as exc:
-            log.error("build_chain failed: %s", exc)
+            log.error("chain build failed: %s", exc)
             raise HTTPException(502, f"Failed to build option chain: {exc}")
 
         opt_tokens = [t for r in chain["rows"] for t in (r["ce_token"], r["pe_token"]) if t]
+        if chain["kind"] == "stocks":
+            spot_tokens = [r["spot_token"] for r in chain["rows"]]
+        else:
+            spot_tokens = [chain["spot_token"]]
         token_list = [
             {"exchangeType": chain["opt_ws_exchange_type"], "tokens": opt_tokens},
-            {"exchangeType": chain["spot_ws_exchange_type"], "tokens": [chain["spot_token"]]},
+            {"exchangeType": chain["spot_ws_exchange_type"], "tokens": spot_tokens},
         ]
         session.chain = chain
         session.feed.set_subscription(token_list)

@@ -29,6 +29,10 @@ Intrinsic is recomputed against the live ticking spot on every update.
 
 - SmartAPI TOTP login flow (session + feed token) from `.env` credentials
 - Manual index selector: **NIFTY** (50-pt strikes, NFO) or **SENSEX** (100-pt strikes, BFO)
+- **F&O STOCKS** view: every NSE stock-option underlying (~200) in one table —
+  one row per stock at its ATM strike for the nearest monthly stock-option
+  expiry, sorted by biggest time-value gap, with spot/option prices prefetched
+  via the bulk quote API and then streamed live
 - Current weekly expiry auto-resolved from the Angel One instrument master
   (nearest future expiry for the selected index)
 - Live spot LTP → nearest strike → chain of 5 strikes above/below

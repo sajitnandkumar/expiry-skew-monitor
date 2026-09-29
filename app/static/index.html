@@ -63,6 +63,7 @@
       <div class="index-select">
         <button id="btnNifty" data-index="NIFTY">NIFTY</button>
         <button id="btnSensex" data-index="SENSEX">SENSEX</button>
+        <button id="btnStocks" data-index="STOCKS">F&amp;O STOCKS</button>
       </div>
       <label class="tolerance">
         Neutral tolerance
@@ -84,7 +85,7 @@
   <main>
     <table id="chainTable">
       <thead>
-        <tr>
+        <tr id="chainHead">
           <th>Strike</th>
           <th>Call Price</th>
           <th>Put Price</th>
@@ -111,6 +112,9 @@
       </p>
       <p>Darker shade = bigger gap. The <b>bold row</b> is the strike closest
         to the current index level (at-the-money).</p>
+      <p>In the <b>F&amp;O Stocks</b> view, each row is one NSE F&amp;O stock at
+        its at-the-money strike for the nearest stock-option (monthly) expiry,
+        sorted with the biggest gaps on top.</p>
     </div>
   </main>
   </div>
