@@ -155,7 +155,7 @@ h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 }
 
 main { padding: 20px 24px; max-width: 900px; margin: 0 auto; }
-#chainTable.stocks + main, main:has(#chainTable.stocks) { max-width: 1050px; }
+#chainTable.stocks + main, main:has(#chainTable.stocks) { max-width: 1250px; }
 .stock-name { font-weight: 600; letter-spacing: 0.3px; }
 
 table { width: 100%; border-collapse: collapse; }

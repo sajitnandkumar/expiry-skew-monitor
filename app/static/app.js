@@ -34,7 +34,7 @@ let selecting = false;     // suppress row re-renders while a selection loads
 async function selectIndex(index) {
   els.buttons.forEach((b) => (b.disabled = true));
   selecting = true;
-  els.body.innerHTML = `<tr><td colspan="9" class="empty">${
+  els.body.innerHTML = `<tr><td colspan="11" class="empty">${
     index === "STOCKS" ? "Building the F&amp;O stock list (15&ndash;20 s)&hellip;" : "Loading option chain&hellip;"
   }</td></tr>`;
   try {
@@ -275,7 +275,8 @@ const INDEX_HEAD = `
   <th>Call Time Value</th><th>Put Time Value</th>
   <th>Pricier Side</th><th>Gap (₹)</th><th>Gap (%)</th>`;
 const STOCK_HEAD = `
-  <th>Stock</th><th>Strike</th><th>Call Price</th><th>Put Price</th>
+  <th>Stock</th><th>NSE LTP</th><th>BSE LTP</th>
+  <th>Strike</th><th>Call Price</th><th>Put Price</th>
   <th>Call Time Value</th><th>Put Time Value</th>
   <th>Pricier Side</th><th>Gap (₹)</th><th>Gap (%)</th>`;
 let currentHead = null;
@@ -357,7 +358,11 @@ function renderStockRows(rows, tolerance) {
   for (const { row, s } of computed) {
     const tr = document.createElement("tr");
     tr.style.background = s.bg;
-    tr.innerHTML = `<td class="stock-name">${row.name}</td><td>${fmtStrike(row.strike)}</td>` + skewCells(row, s);
+    tr.innerHTML =
+      `<td class="stock-name">${row.name}</td>` +
+      `<td>${row.spot != null ? fmt(row.spot) : "—"}</td>` +
+      `<td>${row.bse != null ? fmt(row.bse) : "—"}</td>` +
+      `<td>${fmtStrike(row.strike)}</td>` + skewCells(row, s);
     els.body.appendChild(tr);
   }
 }

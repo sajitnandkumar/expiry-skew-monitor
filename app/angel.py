@@ -317,7 +317,22 @@ class AngelClient:
             ):
                 eq_token[r["name"]] = str(r["token"])
 
+        # BSE listing of the same underlying, where one exists (matched by the
+        # BSE cash symbol, falling back to the instrument name).
+        bse_by_symbol: dict[str, str] = {}
+        bse_by_name: dict[str, str] = {}
+        for r in instruments:
+            if r.get("exch_seg") != "BSE":
+                continue
+            sym, nm = r.get("symbol"), r.get("name")
+            if isinstance(sym, str) and sym in by_name and sym not in bse_by_symbol:
+                bse_by_symbol[sym] = str(r["token"])
+            if isinstance(nm, str) and nm in by_name and nm not in bse_by_name:
+                bse_by_name[nm] = str(r["token"])
+        bse_token = {**bse_by_name, **bse_by_symbol}  # symbol match wins
+
         spots = self._bulk_ltps("NSE", sorted(set(eq_token.values())))
+        bse_spots = self._bulk_ltps("BSE", sorted(set(bse_token.values())))
 
         rows = []
         for name in sorted(by_name):
@@ -329,10 +344,13 @@ class AngelClient:
             if not candidates:
                 continue
             strike = min(candidates, key=lambda k: abs(k - spot))
+            btok = bse_token.get(name)
             rows.append({
                 "name": name,
                 "spot": spot,
                 "spot_token": token,
+                "bse_token": btok,
+                "bse0": bse_spots.get(btok) if btok else None,
                 "strike": strike,
                 "ce_token": by_name[name][strike]["CE"],
                 "pe_token": by_name[name][strike]["PE"],

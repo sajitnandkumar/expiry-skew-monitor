@@ -112,24 +112,26 @@ def build_snapshot(session: UserSession | None) -> dict:
     }
     rows = []
     if chain and kind == "index":
-        spot = prices.get(chain["spot_token"]) or chain["spot"]
+        spot_x, opt_x = chain["spot_ws_exchange_type"], chain["opt_ws_exchange_type"]
+        spot = prices.get(f"{spot_x}:{chain['spot_token']}") or chain["spot"]
         header["spot"] = spot
         interval = chain["strike_interval"]
         header["atm_strike"] = int(round(spot / interval) * interval)
         for r in chain["rows"]:
             rows.append({
                 "strike": r["strike"],
-                "call": prices.get(r["ce_token"]) if r["ce_token"] else None,
-                "put": prices.get(r["pe_token"]) if r["pe_token"] else None,
+                "call": prices.get(f"{opt_x}:{r['ce_token']}") if r["ce_token"] else None,
+                "put": prices.get(f"{opt_x}:{r['pe_token']}") if r["pe_token"] else None,
             })
     elif chain and kind == "stocks":
         for r in chain["rows"]:
             rows.append({
                 "name": r["name"],
                 "strike": r["strike"],
-                "spot": prices.get(r["spot_token"]) or r["spot"],
-                "call": prices.get(r["ce_token"]) or r.get("call0"),
-                "put": prices.get(r["pe_token"]) or r.get("put0"),
+                "spot": prices.get(f"1:{r['spot_token']}") or r["spot"],
+                "bse": (prices.get(f"3:{r['bse_token']}") or r.get("bse0")) if r.get("bse_token") else None,
+                "call": prices.get(f"2:{r['ce_token']}") or r.get("call0"),
+                "put": prices.get(f"2:{r['pe_token']}") or r.get("put0"),
             })
     return {"type": "snapshot", "header": header, "rows": rows}
 
@@ -317,6 +319,10 @@ async def select_index(body: SelectBody, request: Request):
             {"exchangeType": chain["opt_ws_exchange_type"], "tokens": opt_tokens},
             {"exchangeType": chain["spot_ws_exchange_type"], "tokens": spot_tokens},
         ]
+        if chain["kind"] == "stocks":
+            bse_tokens = [r["bse_token"] for r in chain["rows"] if r.get("bse_token")]
+            if bse_tokens:
+                token_list.append({"exchangeType": 3, "tokens": bse_tokens})  # BSE_CM
         session.chain = chain
         session.feed.set_subscription(token_list)
 

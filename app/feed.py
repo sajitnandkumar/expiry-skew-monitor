@@ -92,12 +92,14 @@ class FeedManager:
                     log.error("Subscribe on open failed: %s", exc)
 
     def _on_data(self, wsapp, message):
-        # message: dict with 'token' and 'last_traded_price' (paise)
+        # message: dict with 'exchange_type', 'token' and 'last_traded_price'
+        # (paise). Keyed by "exchange_type:token" — token numbers can collide
+        # across NSE/NFO/BSE.
         try:
             token = str(message.get("token", "")).strip('"')
             ltp = message.get("last_traded_price")
             if token and ltp is not None:
-                self.prices[token] = float(ltp) / 100.0
+                self.prices[f"{message.get('exchange_type')}:{token}"] = float(ltp) / 100.0
         except Exception:
             log.warning("Bad tick: %r", message, exc_info=True)
 
