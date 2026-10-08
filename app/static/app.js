@@ -310,18 +310,20 @@ function skewFor(spot, strike, call, put, tolerance) {
   const delta = Math.abs(callTV - putTV);
   const higher = Math.max(callTV, putTV);
   const lower = Math.min(callTV, putTV);
-  // % is only meaningful when the cheaper leg still has real time value at
-  // this price level — a near-zero denominator makes tiny gaps explode.
-  const negligible = Math.max(strike * 0.001, 0.05);
-  const pct = lower > negligible ? (higher / lower - 1) * 100 : null;
+  // % needs the cheaper leg above tick-size noise (one tick = 0.05), or a
+  // near-zero denominator makes tiny gaps explode. Never scale this floor by
+  // the strike — index strikes are huge relative to premiums.
+  const TICK = 0.05;
+  const pct = lower > TICK ? (higher / lower - 1) * 100 : null;
 
   let side = "≈ Even", sideClass = "side-neutral", bg = "";
   // One leg at/below parity: flag the row only if the other leg carries
-  // meaningful TV; two near-zero TVs (deep ITM near expiry) are noise.
-  const neutral = pct != null ? pct <= tolerance : higher <= negligible;
+  // real TV; two tick-level TVs (deep ITM near expiry) are noise.
+  const neutral = pct != null ? pct <= tolerance : higher <= TICK;
   if (!neutral) {
-    // Colour by % when it exists, else by the rupee gap vs the price level.
-    const intensity = pct != null ? pct : Math.min(150, (delta / strike) * 2000);
+    // Colour by % when it exists, else by the gap relative to the richer TV.
+    const intensity = pct != null ? pct
+      : Math.min(150, (delta / Math.max(higher, TICK)) * 100);
     if (callTV > putTV) {
       side = "Call";
       sideClass = "side-call";
@@ -343,7 +345,7 @@ function skewCells(row, s) {
       <td>${s.putTV != null ? fmt(s.putTV) : "—"}</td>
       <td class="${s.sideClass}">${s.side}</td>
       <td>${s.delta != null ? fmt(s.delta) : "—"}</td>
-      <td>${s.pct != null ? s.pct.toFixed(1) + "%" : "—"}</td>`;
+      <td>${s.pct != null ? (s.pct > 999 ? ">999%" : s.pct.toFixed(1) + "%") : "—"}</td>`;
 }
 
 function renderIndexRows(rows, h, tolerance) {
