@@ -81,6 +81,16 @@ def _warm_instruments():
 app = FastAPI(title="Expiry Skew Monitor", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    """Make browsers revalidate the page and static assets on every load so a
+    redeploy is picked up immediately (unchanged files still 304)."""
+    resp = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 class SelectBody(BaseModel):
     index: str  # "NIFTY" | "SENSEX"
 
